@@ -20,7 +20,7 @@ It is not responsible for:
 
 - Frontend behavior or the main DFSB backend's Flask routes.
 - Customer or generator database access.
-- Product-specific shipping decisions in `Sprint_DFSB_Back_End_API`.
+- Product-specific shipping decisions in `SoftwareArchitecture_Back_End_API`.
 - International shipping. Shipment requests are restricted to the US.
 
 ## 2. Macro View
@@ -44,7 +44,6 @@ flowchart LR
     Caller -->|HTTP + JSON| HTTP
     HTTP --> Services
     Services --> Schemas
-    Services --> Config
     Services --> Client
     Client --> Config
     Client --> Errors
@@ -75,9 +74,9 @@ api_schemas/              HTTP-only request/response contracts
 services/                 Business operations and response interpretation
   |
   +--> schemas/           Input validation and typed result contracts
-  +--> config.py          Required environment-owned values
   +--> client.py          HTTP transport, retries, tracing, and JSON decoding
            |
+           +--> config.py
            +--> exceptions.py
            |
            v
@@ -100,6 +99,19 @@ Responsibilities:
 The routes do not build Shippo payloads, implement retries, load backend data,
 or select rates.
 
+HTTP outcomes are defined at this boundary:
+
+| Condition | Status |
+|---|---:|
+| Successful operation | `200` |
+| `NO_RATES` or `INVALID_ADDRESS` business outcome | `200` |
+| Request model validation failure | `422` |
+| POST body is not `application/json` | `415` |
+| `CONFIGURATION_ERROR` | `503` |
+| `SHIPPO_TIMEOUT` | `504` |
+| `SHIPPO_FAILURE` | `502` |
+| Unexpected route defect | `500` |
+
 Directory: `api_schemas/`
 
 These models describe only the public HTTP contract. Internal provider models
@@ -117,8 +129,8 @@ Responsibilities:
 
 Configuration precedence is:
 
-1. Process environment variables.
-2. Values from `.env`.
+1. Existing process environment variables, which `.env` never replaces.
+2. Values from `.env` when the process does not already define the variable.
 3. Safe transport defaults where documented.
 
 Shipping addresses are request data. Configuration errors represent actual
@@ -146,7 +158,7 @@ Directory: `shippo_integration/services/`
 | Module | Public operation | Responsibility |
 |---|---|---|
 | `address.py` | `validate_address(...)` | Build an address payload and interpret validation results |
-| `shipping.py` | `get_shipping_quote(address_to, parcels)` | Load origin, validate shipment, request rates, and select the cheapest rate |
+| `shipping.py` | `get_shipping_quote(address_from, address_to, parcels)` | Validate the complete shipment, request rates, and select the cheapest rate |
 | `error_mapping.py` | Internal helper | Convert adapter exceptions to stable business codes/messages |
 
 Services return typed Pydantic models:
@@ -194,7 +206,7 @@ File: `shippo_integration/services/error_mapping.py`
 
 Services convert those exceptions into stable business codes:
 
-| Technical condition | Business code |
+| Condition | Business code |
 |---|---|
 | Missing/invalid configuration | `CONFIGURATION_ERROR` |
 | Request timeout | `SHIPPO_TIMEOUT` |
@@ -232,7 +244,6 @@ flowchart TD
     AddressService --> AddressSchema
     AddressService --> ErrorMapping
 
-    ShippingService --> Config
     ShippingService --> Client
     ShippingService --> AddressSchema
     ShippingService --> ParcelSchema
@@ -252,8 +263,8 @@ flowchart TD
 
 ### 5.1 HTTP Caller Input
 
-The caller supplies the changing destination and parcel data. The origin is not
-accepted from the caller; it comes from required environment configuration.
+The caller supplies complete origin and destination addresses plus one or more
+parcels. No shipping address comes from environment configuration.
 
 ```http
 POST /shipping-quote HTTP/1.1
@@ -262,20 +273,29 @@ Content-Type: application/json
 X-Correlation-ID: order-123
 
 {
+  "address_from": {
+    "name": "Origin Company",
+    "street1": "123 Origin Street",
+    "city": "Torrance",
+    "state": "CA",
+    "zip": "90504",
+    "country": "US"
+  },
   "address_to": {
-        "name": "Customer Company",
-        "street1": "123 Main Street",
-        "city": "Atlanta",
-        "state": "GA",
-    "zip": "30301"
+    "name": "Customer Company",
+    "street1": "456 Destination Street",
+    "city": "Atlanta",
+    "state": "GA",
+    "zip": "30301",
+    "country": "US"
   },
   "parcels": [
     {
-            "length": "24",
-            "width": "16",
-            "height": "12",
-            "distance_unit": "in",
-            "weight": "12",
+      "length": "24",
+      "width": "16",
+      "height": "12",
+      "distance_unit": "in",
+      "weight": "12",
       "mass_unit": "lb"
     }
   ]
@@ -285,6 +305,12 @@ X-Correlation-ID: order-123
 Country may be omitted. The shipping schema inserts `country: "US"` for both
 origin and destination. An explicitly non-US country is rejected before Shippo
 is called.
+
+Parcel measurements may be strings, integers, or floating-point numbers. The
+example uses strings because Shippo commonly represents measurements that way.
+
+The shipping endpoint uses `zip` inside `address_from` and `address_to`.
+The address-validation endpoint uses the separate top-level field `zip_code`.
 
 ### 5.2 Address Ownership
 
@@ -338,12 +364,12 @@ The service sends this structure to `/shipments/`:
     "street1": "123 Origin Street",
     "city": "Torrance",
     "state": "CA",
-    "zip": "90001",
+    "zip": "90504",
     "country": "US"
   },
   "address_to": {
     "name": "Customer Company",
-    "street1": "123 Main Street",
+    "street1": "456 Destination Street",
     "city": "Atlanta",
     "state": "GA",
     "zip": "30301",
@@ -387,7 +413,7 @@ Serialize at an API boundary with:
 
 ```python
 response_body = result.model_dump(exclude_unset=True)
-response_json = result.model_dump_json(exclude_unset=True)
+# Flask serializes this dictionary into the HTTP JSON response.
 ```
 
 ### 5.6 Failure Paths
@@ -395,25 +421,24 @@ response_json = result.model_dump_json(exclude_unset=True)
 ```mermaid
 flowchart TD
     Start[Shipping Quote Request]
-    Origin{Origin config complete?}
-    Destination{Destination valid and US?}
-    Parcel{At least one parcel?}
+    Addresses{Origin and destination complete and US?}
+    Parcel{Complete positive parcel data?}
+    Config{Shippo credential and transport settings valid?}
     Client[Call Shippo]
     Rates{Rates returned?}
     Success[ShippingQuoteResult]
     ConfigError[ShippingErrorResult: CONFIGURATION_ERROR]
     ValidationError[Pydantic ValidationError]
-    ValueError[ValueError]
     ProviderError[ShippingErrorResult: timeout/failure]
     NoRates[ShippingErrorResult: NO_RATES]
 
-    Start --> Origin
-    Origin -->|No| ConfigError
-    Origin -->|Yes| Destination
-    Destination -->|No| ValidationError
-    Destination -->|Yes| Parcel
-    Parcel -->|No| ValueError
-    Parcel -->|Yes| Client
+    Start --> Addresses
+    Addresses -->|No| ValidationError
+    Addresses -->|Yes| Parcel
+    Parcel -->|No| ValidationError
+    Parcel -->|Yes| Config
+    Config -->|No| ConfigError
+    Config -->|Yes| Client
     Client -->|Technical failure| ProviderError
     Client -->|Response| Rates
     Rates -->|Yes| Success
@@ -476,14 +501,14 @@ Possible outcomes are:
 
 ## 7. HTTP Retry and Observability Flow
 
-Every `get()` or `post()` call receives a generated UUID sent as
-`X-Correlation-ID`. The same identifier is reused for all attempts belonging to
-that logical request.
+Every `get()` or `post()` call sends an `X-Correlation-ID`. A caller-supplied ID
+is preserved; otherwise `ShippoClient` generates a UUID. The same identifier is
+reused for all attempts belonging to that logical request.
 
 ```mermaid
 flowchart TD
     Call[Client get/post]
-    ID[Generate correlation ID]
+    ID[Reuse supplied ID or generate UUID]
     Attempt[Execute HTTP attempt]
     Result{Outcome}
     Retry{Method and failure retryable?}
@@ -562,7 +587,7 @@ when `RUN_SHIPPO_INTEGRATION=1` is explicitly set.
 2. Keep HTTP routes thin: validate, call services, map status, serialize.
 3. Keep provider-independent decisions inside services.
 4. Validate data before calling Shippo.
-5. Keep the origin in environment configuration and destination in request data.
+5. Require complete origin, destination, and parcel data at the HTTP boundary.
 6. Preserve the US-only country rule unless international support is designed
    explicitly across schemas, services, tests, and documentation.
 7. Return typed service models and serialize only at API boundaries.
@@ -570,3 +595,256 @@ when `RUN_SHIPPO_INTEGRATION=1` is explicitly set.
 9. Never log credentials, payloads, response bodies, or personal address data.
 10. Keep POST retries conservative to avoid duplicate provider resources.
 11. Add mocked tests for every new HTTP/provider response or failure path.
+
+## 11. Schema and Service Class Model
+
+The integration has two contract levels. `api_schemas/` describes the local
+HTTP interface, while `shippo_integration/schemas/` describes reusable service
+and provider-facing data. HTTP response models adapt internal results instead
+of exposing them directly.
+
+```mermaid
+classDiagram
+  class AddressValidationRequestSchema {
+    +str customer_name
+    +str street1
+    +str city
+    +str state
+    +str zip_code
+    +str country = US
+  }
+
+  class AddressValidationResponseSchema {
+    +bool success
+    +bool valid
+    +str|null normalized_zip
+    +bool|null is_residential
+    +list messages
+    +BusinessErrorCode|null error_code
+    +str|null message
+    +from_result(result)
+  }
+
+  class AddressSchema {
+    +str|null name
+    +str|null street1
+    +str|null city
+    +str|null state
+    +str|null zip
+    +str|null country
+    +bool|null validate_address
+  }
+
+  class ParcelSchema {
+    +Measurement|null length
+    +Measurement|null width
+    +Measurement|null height
+    +str|null distance_unit
+    +Measurement|null weight
+    +str|null mass_unit
+  }
+
+  class ShippingQuoteRequestSchema {
+    +AddressSchema address_from
+    +AddressSchema address_to
+    +ParcelSchema[] parcels
+    +validate_complete_addresses()
+  }
+
+  class AddressValidationResult {
+    +bool success
+    +bool valid
+    +str|null zip
+    +bool|null is_residential
+    +list messages
+    +BusinessErrorCode|null error_code
+    +str|null message
+  }
+
+  class BusinessErrorSchema {
+    +bool success
+    +BusinessErrorCode error_code
+    +str message
+  }
+
+  class ShippingQuoteResult {
+    +true success
+    +str|null carrier
+    +str|null service
+    +str|null amount
+    +str|null currency
+    +int|null estimated_days
+  }
+
+  class ShippingErrorResult {
+    +dict[] shippo_messages
+  }
+
+  ShippingQuoteRequestSchema *-- AddressSchema
+  ShippingQuoteRequestSchema *-- ParcelSchema
+  ShippingErrorResult --|> BusinessErrorSchema
+  AddressValidationRequestSchema ..> AddressSchema : service builds
+  AddressValidationResult ..> AddressValidationResponseSchema : adapted to
+```
+
+Generic `AddressSchema` and `ParcelSchema` models preserve unknown provider
+extensions and permit partial objects. `ShippingQuoteRequestSchema` is the
+aggregate boundary that requires complete addresses, at least one parcel,
+finite positive measurements, distance units `in` or `cm`, and mass units
+`lb`, `oz`, `kg`, or `g`.
+
+| Service operation | Input | Typed result |
+|---|---|---|
+| `validate_address(...)` | Name, street, city, state, ZIP, country, optional client/correlation ID | `AddressValidationResult` |
+| `get_shipping_quote(...)` | Origin, destination, parcels, optional client/correlation ID | `ShippingQuoteResult` or `ShippingErrorResult` |
+
+## 12. Address Payload and Response Transformation
+
+The address route deliberately uses caller-friendly `customer_name` and
+`zip_code` fields. The service translates them to Shippo's `name` and `zip`
+keys and aliases `validate_address` back to Shippo's `validate` key.
+
+```mermaid
+flowchart LR
+  HTTP[HTTP request<br/>customer_name, zip_code]
+  API[AddressValidationRequestSchema<br/>trim text, uppercase state/country]
+  Internal[AddressSchema<br/>name, zip, validate_address]
+  Provider[Shippo JSON<br/>name, zip, validate]
+  Result[AddressValidationResult<br/>zip]
+  Response[HTTP response<br/>normalized_zip]
+
+  HTTP --> API --> Internal --> Provider
+  Provider --> Result --> Response
+```
+
+Exact provider request:
+
+```json
+{
+  "name": "Customer Company",
+  "street1": "123 Main Street",
+  "city": "Atlanta",
+  "state": "GA",
+  "zip": "30301",
+  "country": "US",
+  "validate": true
+}
+```
+
+Valid HTTP result:
+
+```json
+{
+  "success": true,
+  "valid": true,
+  "normalized_zip": "30301-1234",
+  "is_residential": false,
+  "messages": []
+}
+```
+
+Invalid real-world address result:
+
+```json
+{
+  "success": false,
+  "valid": false,
+  "normalized_zip": null,
+  "is_residential": null,
+  "messages": [
+  {"text": "Street could not be validated."}
+  ],
+  "error_code": "INVALID_ADDRESS",
+  "message": "Shippo could not validate the supplied address."
+}
+```
+
+## 13. Correlation ID Propagation
+
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Caller
+  participant Flask as app.py
+  participant Service
+  participant Client as ShippoClient
+  participant Shippo
+
+  Caller->>Flask: Request + optional X-Correlation-ID
+  Flask->>Flask: Accept usable ID or generate UUID
+  Flask->>Service: Operation(..., correlation_id)
+  Service->>Client: get/post(..., correlation_id)
+  Client->>Shippo: HTTPS + same X-Correlation-ID
+  alt Retryable response
+    Client->>Shippo: Retry with same X-Correlation-ID
+  end
+  Shippo-->>Client: Provider response
+  Client-->>Service: Decoded dictionary
+  Service-->>Flask: Typed result
+  Flask-->>Caller: JSON + same X-Correlation-ID
+```
+
+The identifier joins backend, integration, retry, and response logs without
+logging personal address data. It is tracing metadata, not authentication.
+
+## 14. Retry Decision Model
+
+```mermaid
+flowchart TD
+  A[Execute Shippo request] --> B{Outcome}
+  B -- Successful HTTP --> C{JSON object?}
+  C -- Yes --> D[Return dictionary]
+  C -- No --> E[Raise ShippoResponseError]
+  B -- HTTP error --> F{Method and status}
+  F -- GET 429/502/503/504 --> G{Attempts remain?}
+  F -- POST 429 --> G
+  F -- Other status --> H[Raise ShippoAPIError]
+  B -- Timeout/connection/chunk error --> I{GET request?}
+  I -- Yes --> G
+  I -- No --> J[Raise timeout or API error]
+  G -- Yes --> K[Retry-After or exponential delay]
+  K --> A
+  G -- No --> L[Raise exhausted failure]
+```
+
+| Event | `GET` | `POST` | Reason |
+|---|---|---|---|
+| HTTP `429` | Retry | Retry | Explicit provider rate limit |
+| HTTP `502`, `503`, `504` | Retry | Stop | POST may already have created a resource |
+| Timeout/connection/chunk failure | Retry | Stop | Ambiguous POST replay is unsafe |
+| Invalid successful JSON | Stop | Stop | Retrying cannot establish response correctness |
+| Other HTTP error | Stop | Stop | Not part of the retry policy |
+
+Fallback delay before retry number $n$ is exponential:
+
+$$
+	ext{delay}_n = \text{SHIPPO_BACKOFF_SECONDS} \times 2^{n-1}
+$$
+
+`Retry-After` seconds or HTTP dates take precedence when valid, and all delays
+are capped by `SHIPPO_MAX_RETRY_AFTER_SECONDS`.
+
+## 15. Exception Translation and HTTP Outcomes
+
+```mermaid
+flowchart LR
+  Config[ShippoConfigurationError] --> Map[map_shippo_exception]
+  Timeout[ShippoTimeoutError] --> Map
+  API[ShippoAPIError] --> Map
+  Response[ShippoResponseError] --> Map
+
+  Map --> Configuration[CONFIGURATION_ERROR]
+  Map --> TimedOut[SHIPPO_TIMEOUT]
+  Map --> Failure[SHIPPO_FAILURE]
+
+  Configuration --> HTTP503[HTTP 503]
+  TimedOut --> HTTP504[HTTP 504]
+  Failure --> HTTP502[HTTP 502]
+```
+
+`NO_RATES` and `INVALID_ADDRESS` are completed business outcomes and use HTTP
+`200`. Technical failures use `502`, `503`, or `504`. Callers should branch on
+`error_code`; message text is intended for people and may evolve.
+
+The route layer catches unexpected defects separately and returns `500` without
+exposing stack traces, credentials, raw provider payloads, or exception text.

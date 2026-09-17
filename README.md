@@ -2,11 +2,13 @@
 
 Locally runnable internal HTTP service for generic Shippo operations. It is
 intentionally not an installable distribution and is not imported by
-`Sprint_DFSB_Back_End_API`. The backend communicates with this service only
+`SoftwareArchitecture_Back_End_API`. The backend communicates with this service only
 through its HTTP + JSON contract.
 
-For module relationships, request sequences, payload examples, retry behavior,
-and progressively deeper diagrams, see [ARCHITECTURE.md](ARCHITECTURE.md).
+For the cross-repository system view, see
+[OVERALL_ARCHITECTURE.md](OVERALL_ARCHITECTURE.md). For this repository's
+module relationships, request sequences, payload examples, and retry behavior,
+see [SPECIFIC_ARCHITECTURE.md](SPECIFIC_ARCHITECTURE.md).
 
 ## Current Architecture
 
@@ -245,5 +247,5 @@ provider API resources. Do not enable it in routine unit-test runs.
 This repository owns generic Shippo configuration, transport, address, and
 shipment behavior plus its own thin local HTTP adapter. Generator database
 access, frontend behavior, and product-specific shipping rules remain in
-`Sprint_DFSB_Back_End_API`. The backend depends on this service's HTTP contract,
+`SoftwareArchitecture_Back_End_API`. The backend depends on this service's HTTP contract,
 not on its Python modules or source tree.
