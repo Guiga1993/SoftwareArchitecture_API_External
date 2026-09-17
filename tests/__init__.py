@@ -1,0 +1,1 @@
+"""Automated tests for the external Shippo integration project."""
