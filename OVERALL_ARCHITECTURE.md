@@ -90,7 +90,7 @@ Only `frontend` and `backend` publish host ports. Only
 only by `backend` at `/app/database`. Health checks are liveness-only and do
 not call Shippo. The stack definition is
 [docker-compose.yml](docker-compose.yml), and the complete operating procedure
-is in [CONTAINERIZATION.md](../CONTAINERIZATION.md).
+is in [CONTAINERIZATION.md](CONTAINERIZATION.md).
 
 The Compose files were statically validated in an environment without Docker.
 Image builds, service health, private DNS, and volume persistence still require

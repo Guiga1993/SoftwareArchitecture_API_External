@@ -39,8 +39,8 @@ publish that port to the host; the backend reaches it privately at
 validating credentials or contacting Shippo.
 
 The stack definition is [docker-compose.yml](docker-compose.yml) in this
-repository. See [the containerization guide](../CONTAINERIZATION.md) for the
-full topology and operating commands.
+repository. See [the containerization guide](CONTAINERIZATION.md) for the full
+topology and operating commands.
 
 ## Structure
 
