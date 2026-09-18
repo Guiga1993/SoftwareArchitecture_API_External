@@ -38,13 +38,15 @@ publish that port to the host; the backend reaches it privately at
 `SHIPPO_API_KEY`. Its local `/health` check reports process liveness without
 validating credentials or contacting Shippo.
 
-See [the parent containerization guide](../CONTAINERIZATION.md) for the full
-topology and operating commands.
+The stack definition is [docker-compose.yml](docker-compose.yml) in this
+repository. See [the containerization guide](../CONTAINERIZATION.md) for the
+full topology and operating commands.
 
 ## Structure
 
 ```text
 app.py                      Flask + OpenAPI HTTP adapter
+docker-compose.yml          Three-service container stack definition
 api_schemas/                HTTP-only request/response contracts
 shippo_integration/
 	config.py                 Environment loading and validation

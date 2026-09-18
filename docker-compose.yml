@@ -1,0 +1,45 @@
+services:
+  shippo-integration:
+    build:
+      context: .
+    environment:
+      INTEGRATION_API_HOST: 0.0.0.0
+      INTEGRATION_API_PORT: 8001
+      INTEGRATION_API_DEBUG: "false"
+      SHIPPO_API_KEY: ${SHIPPO_API_KEY:?Set SHIPPO_API_KEY in .env}
+      SHIPPO_BASE_URL: ${SHIPPO_BASE_URL:-https://api.goshippo.com}
+      SHIPPO_TIMEOUT_SECONDS: ${SHIPPO_TIMEOUT_SECONDS:-30}
+      SHIPPO_MAX_ATTEMPTS: ${SHIPPO_MAX_ATTEMPTS:-3}
+      SHIPPO_BACKOFF_SECONDS: ${SHIPPO_BACKOFF_SECONDS:-0.5}
+      SHIPPO_MAX_RETRY_AFTER_SECONDS: ${SHIPPO_MAX_RETRY_AFTER_SECONDS:-30}
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ../SoftwareArchitecture_Back_End_API
+    environment:
+      BACKEND_FILE_LOGGING_ENABLED: "false"
+      SHIPPO_INTEGRATION_BASE_URL: http://shippo-integration:8001
+      SHIPPO_INTEGRATION_CONNECT_TIMEOUT_SECONDS: ${SHIPPO_INTEGRATION_CONNECT_TIMEOUT_SECONDS:-3.05}
+      SHIPPO_INTEGRATION_READ_TIMEOUT_SECONDS: ${SHIPPO_INTEGRATION_READ_TIMEOUT_SECONDS:-30}
+    ports:
+      - "${BACKEND_HOST_PORT:-5001}:5001"
+    volumes:
+      - backend-data:/app/database
+    depends_on:
+      shippo-integration:
+        condition: service_healthy
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../SoftwareArchitecture_Front_End
+    ports:
+      - "${FRONTEND_HOST_PORT:-8080}:80"
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  backend-data:
