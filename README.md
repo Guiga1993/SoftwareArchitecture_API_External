@@ -30,6 +30,17 @@ This repository owns complete shipment validation, Shippo authentication,
 provider endpoints, transport, retries, rate selection, and provider-message
 normalization. It does not import backend models or access SQLite.
 
+## Container Deployment and Isolation
+
+The container runs `app:app` with Gunicorn on port `8001`. Compose does not
+publish that port to the host; the backend reaches it privately at
+`http://shippo-integration:8001`. This is the only service that receives
+`SHIPPO_API_KEY`. Its local `/health` check reports process liveness without
+validating credentials or contacting Shippo.
+
+See [the parent containerization guide](../CONTAINERIZATION.md) for the full
+topology and operating commands.
+
 ## Structure
 
 ```text

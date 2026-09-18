@@ -59,6 +59,12 @@ The normal direction of dependencies is from high-level business operations to
 lower-level transport and configuration. The HTTP client does not know about
 address validation or shipping-rate selection.
 
+Local development serves this adapter on `127.0.0.1:8001`. In Compose,
+Gunicorn binds container port `8001` under the private service name
+`shippo-integration`; no host port is published. The backend is its only
+application caller, and this container alone receives `SHIPPO_API_KEY`. The
+health route checks HTTP process liveness without loading Shippo settings.
+
 ## 3. Layered Architecture
 
 ```text

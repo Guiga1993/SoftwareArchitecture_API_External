@@ -6,7 +6,9 @@ from pathlib import Path
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-EXCLUDED_DIRECTORIES = frozenset({".git", ".pytest_cache", "__pycache__", "venv"})
+EXCLUDED_DIRECTORIES = frozenset(
+    {".git", ".pytest_cache", ".venv", "__pycache__", "venv"}
+)
 PLACEHOLDER_DOCSTRINGS = frozenset({"todo", "fixme", "tbd", "placeholder"})
 
 

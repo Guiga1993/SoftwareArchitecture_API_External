@@ -19,11 +19,11 @@ The application manages customers, hydrogen generator definitions, and the
 relationships between them. It also requests shipping estimates using trusted
 generator measurements and caller-supplied US addresses.
 
-| Repository | Runtime | Port | Primary ownership |
-|---|---|---:|---|
-| `SoftwareArchitecture_Front_End` | Static HTML/CSS/JavaScript in a browser | `5500` | User interaction and presentation |
-| `SoftwareArchitecture_Back_End_API` | Flask + OpenAPI + SQLAlchemy | `5001` | Domain CRUD, SQLite, trusted product data, freight policy |
-| `SoftwareArchitecture_API_External` | Flask + OpenAPI + requests | `8001` | Shippo contracts, credentials, retries, rate selection |
+| Repository | Local runtime | Compose runtime | Primary ownership |
+|---|---|---|---|
+| `SoftwareArchitecture_Front_End` | Live Server `:5500` | nginx `:80`, host `:8080` by default | User interaction and presentation |
+| `SoftwareArchitecture_Back_End_API` | Flask `:5001` | Gunicorn `:5001`, host `:5001` by default | Domain CRUD, SQLite, trusted product data, freight policy |
+| `SoftwareArchitecture_API_External` | Flask `:8001` | Gunicorn `:8001`, private only | Shippo contracts, credentials, retries, rate selection |
 
 External dependencies:
 
@@ -65,37 +65,35 @@ versionable HTTP and JSON contracts.
 ## 4. Container and Deployment View
 
 ```mermaid
-flowchart TB
-    subgraph Workstation[Developer Workstation]
-        subgraph BrowserProcess[Browser Process]
-            UI[index.html + style.css + scripts.js]
-        end
+flowchart LR
+  Browser[Browser]
 
-        subgraph BackendProcess[Python Process :5001]
-            FlaskBackend[Flask/OpenAPI routes]
-            Domain[Business services]
-            ORM[SQLAlchemy models]
-            FlaskBackend --> Domain
-            FlaskBackend --> ORM
-        end
+  subgraph Compose[Docker Compose private network]
+    Frontend[frontend<br/>nginx :80]
+    Backend[backend<br/>Gunicorn :5001]
+    Integration[shippo-integration<br/>Gunicorn :8001]
+    Volume[(backend-data<br/>/app/database)]
+  end
 
-        subgraph IntegrationProcess[Python Process :8001]
-            FlaskIntegration[Flask/OpenAPI routes]
-            Adapter[Shippo services]
-            HTTPClient[ShippoClient]
-            FlaskIntegration --> Adapter --> HTTPClient
-        end
+  Shippo[api.goshippo.com]
 
-        SQLite[(database/db.sqlite3)]
-    end
-
-    Shippo[api.goshippo.com]
-
-    UI -->|http://127.0.0.1:5001| FlaskBackend
-    ORM -->|File I/O| SQLite
-    Domain -->|http://127.0.0.1:8001| FlaskIntegration
-    HTTPClient -->|HTTPS| Shippo
+  Browser -->|Host :8080| Frontend
+  Browser -.->|Optional host :5001| Backend
+  Frontend -->|/api prefix stripped| Backend
+  Backend -->|http://shippo-integration:8001| Integration
+  Backend -->|SQLite file I/O| Volume
+  Integration -->|Authenticated HTTPS| Shippo
 ```
+
+Only `frontend` and `backend` publish host ports. Only
+`shippo-integration` receives `SHIPPO_API_KEY`, and `backend-data` is mounted
+only by `backend` at `/app/database`. Health checks are liveness-only and do
+not call Shippo. The complete operating procedure is in
+[CONTAINERIZATION.md](../CONTAINERIZATION.md).
+
+The Compose files were statically validated in an environment without Docker.
+Image builds, service health, private DNS, and volume persistence still require
+verification on a Docker-enabled host.
 
 The three runtimes can fail independently. If Shippo or the integration API is
 unavailable, backend CRUD remains usable. If the backend is unavailable, the

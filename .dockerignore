@@ -1,0 +1,13 @@
+.git
+.gitignore
+.venv
+__pycache__
+.pytest_cache
+tests
+*.pyc
+*.pyo
+*.log
+.env
+README.md
+SPECIFIC_ARCHITECTURE.md
+OVERALL_ARCHITECTURE.md
