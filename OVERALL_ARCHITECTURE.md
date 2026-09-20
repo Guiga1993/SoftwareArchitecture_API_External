@@ -25,6 +25,23 @@ generator measurements and caller-supplied US addresses.
 | `SoftwareArchitecture_Back_End_API` | Flask `:5001` | Gunicorn `:5001`, host `:5001` by default | Domain CRUD, SQLite, trusted product data, freight policy |
 | `SoftwareArchitecture_API_External` | Flask `:8001` | Gunicorn `:8001`, private only | Shippo contracts, credentials, retries, rate selection |
 
+### Port meanings by runtime
+
+The frontend uses different ports because local development and Docker expose
+different servers:
+
+| Runtime | Browser URL | Frontend server | Meaning |
+|---|---|---|---|
+| Local development | `http://127.0.0.1:5500` | VS Code Live Server on `:5500` | The static frontend is served directly from the frontend repository. |
+| Docker Compose | `http://localhost:8080` | Host `:8080` mapped to nginx container `:80` | nginx serves the static frontend and proxies `/api/` to `backend:5001`. |
+
+Port `5500` is therefore a development-server port, while port `8080` is the
+host-facing Docker port. They do not represent two frontend applications or
+two different frontend implementations. Inside Docker, nginx still listens on
+port `80`; the mapping `8080:80` makes it available as `localhost:8080` on the
+host. The backend and integration ports remain `5001` and `8001` inside the
+Compose network; only the backend's `5001` is published to the host.
+
 External dependencies:
 
 | Dependency | Accessed by | Purpose |
@@ -39,7 +56,7 @@ flowchart LR
     User[System User]
 
     subgraph LocalSystem[Hydrogen Generator Management System]
-        Frontend[Frontend<br/>Static browser application<br/>:5500]
+        Frontend[Frontend<br/>Local: :5500<br/>Docker host: :8080 -> nginx :80]
         Backend[Backend API<br/>Application and domain service<br/>:5001]
         Integration[External Integration API<br/>Shippo adapter<br/>:8001]
         DB[(SQLite<br/>Backend-owned)]
@@ -77,7 +94,7 @@ flowchart LR
 
   Shippo[api.goshippo.com]
 
-  Browser -->|Host :8080| Frontend
+  Browser -->|Local: :5500 or Docker host: :8080| Frontend
   Browser -.->|Optional host :5001| Backend
   Frontend -->|/api prefix stripped| Backend
   Backend -->|http://shippo-integration:8001| Integration
