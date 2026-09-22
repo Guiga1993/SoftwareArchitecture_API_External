@@ -2,6 +2,8 @@ services:
   shippo-integration:
     build:
       context: .
+    ports:
+      - "8001:8001"
     environment:
       INTEGRATION_API_HOST: 0.0.0.0
       INTEGRATION_API_PORT: 8001
@@ -22,10 +24,12 @@ services:
       SHIPPO_INTEGRATION_BASE_URL: http://shippo-integration:8001
       SHIPPO_INTEGRATION_CONNECT_TIMEOUT_SECONDS: ${SHIPPO_INTEGRATION_CONNECT_TIMEOUT_SECONDS:-3.05}
       SHIPPO_INTEGRATION_READ_TIMEOUT_SECONDS: ${SHIPPO_INTEGRATION_READ_TIMEOUT_SECONDS:-30}
+      DOCKER_CONTAINER: "true"
     ports:
       - "${BACKEND_HOST_PORT:-5001}:5001"
     volumes:
-      - backend-data:/app/database
+      - ./database:/app/database
+      - ./logs:/app/logs
     depends_on:
       shippo-integration:
         condition: service_healthy
@@ -40,6 +44,3 @@ services:
       backend:
         condition: service_healthy
     restart: unless-stopped
-
-volumes:
-  backend-data:

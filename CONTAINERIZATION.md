@@ -65,7 +65,7 @@ docker compose down --volumes
 
 The browser sends API requests to nginx under `/api`. Nginx strips that prefix and forwards requests to `http://backend:5001/`. The backend calls `http://shippo-integration:8001` for address validation and shipping quotes. Shippo is never called by browser code or by the backend directly.
 
-The `backend-data` named volume is mounted only at `/app/database`, where the application stores `db.sqlite3`. Backend file logging is disabled in Compose so logs flow to standard output for `docker compose logs`.
+The backend app owns the SQLite schema and database access logic, but in Compose the runtime database is persisted via the host-mounted path `./database:/app/database` in this repository. That means the database file is physically stored under the external API repository while the backend code is still responsible for creating and managing it. The `backend-data` named volume is not used in the current compose file; file logging is disabled in Compose so logs flow to standard output for `docker compose logs`.
 
 Health checks are liveness-only. Backend and integration checks call their local `/health` endpoints with Python's standard library and do not validate credentials or contact Shippo. Compose waits for integration health before starting the backend and for backend health before starting the frontend.
 
