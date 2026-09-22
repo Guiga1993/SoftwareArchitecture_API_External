@@ -30,6 +30,25 @@ This repository owns complete shipment validation, Shippo authentication,
 provider endpoints, transport, retries, rate selection, and provider-message
 normalization. It does not import backend models or access SQLite.
 
+## Shippo Service Dependencies
+
+Shippo's status page separates availability into monitoring categories. They
+are not four services that this application calls independently:
+
+| Status category | Relationship to this project |
+|---|---|
+| Shippo REST API | Direct dependency. This service calls `https://api.goshippo.com`. |
+| Shippo Web Dashboard | Not used by application code. It is Shippo's browser interface. |
+| Carrier API | Indirect dependency. Shippo contacts carrier systems to obtain rates and perform shipping operations. |
+| Shippo Platform API | Not used. The project does not implement Shippo's platform or embedded partner APIs. |
+
+Normal application traffic uses `POST /addresses/` for validation and
+`POST /shipments/` for shipping rates. `GET /carrier_accounts/` is used only by
+the explicitly enabled live connectivity test. A Carrier API incident may still
+prevent rates from being returned even though this service calls only Shippo's
+REST API directly. Current availability should be checked on
+[Shippo's status page](https://status.goshippo.com/).
+
 ## Container Deployment and Isolation
 
 The container runs `app:app` with Gunicorn on port `8001`. Compose does not

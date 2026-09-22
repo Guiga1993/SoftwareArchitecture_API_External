@@ -4,7 +4,7 @@
 
 `SoftwareArchitecture_API_External` is an independent, locally runnable HTTP
 integration service for Shippo. A thin Flask + flask-openapi3 adapter invokes
-the existing Python service layer. It is not installed by the main DFSB backend;
+the existing Python service layer. It is not installed by the main backend API;
 the backend uses the integration service through HTTP + JSON only.
 
 The repository is responsible for:
@@ -18,7 +18,7 @@ The repository is responsible for:
 
 It is not responsible for:
 
-- Frontend behavior or the main DFSB backend's Flask routes.
+- Frontend behavior or the backend API's Flask routes.
 - Customer or generator database access.
 - Product-specific shipping decisions in `SoftwareArchitecture_Back_End_API`.
 - International shipping. Shipment requests are restricted to the US.
@@ -58,6 +58,27 @@ flowchart LR
 The normal direction of dependencies is from high-level business operations to
 lower-level transport and configuration. The HTTP client does not know about
 address validation or shipping-rate selection.
+
+### Shippo status domains and API usage
+
+Shippo's status page reports `Shippo REST API`, `Shippo Web Dashboard`,
+`Carrier API`, and `Shippo Platform API` as separate operational domains. These
+are monitoring categories, not four required application connections.
+
+| Domain | Use in this architecture |
+|---|---|
+| Shippo REST API | Called directly at `https://api.goshippo.com` using Shippo token authentication. |
+| Shippo Web Dashboard | Not called; it is an operator-facing Shippo web application. |
+| Carrier API | Used indirectly when Shippo requests rates or other operations from carriers. |
+| Shippo Platform API | Not called; platform-partner and embedded-shipping features are outside scope. |
+
+The production service paths are `POST /addresses/` and `POST /shipments/`.
+The opt-in live integration test also calls `GET /carrier_accounts/`. Therefore,
+REST API availability directly affects all Shippo operations, while a Carrier
+API outage can selectively affect rates even when the Shippo REST API remains
+reachable. Status labels describe current provider health and should be read
+from [Shippo's status page](https://status.goshippo.com/) rather than treated as
+permanent architecture state.
 
 Local development serves this adapter on `127.0.0.1:8001`. In Compose,
 Gunicorn binds container port `8001` under the private service name

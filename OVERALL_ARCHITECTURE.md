@@ -32,6 +32,25 @@ External dependencies:
 | SQLite `database/db.sqlite3` | Backend only | Persist customers, generators, and relationships |
 | Shippo HTTPS API | Integration API only | Validate addresses and obtain carrier rates |
 
+### Shippo operational domains
+
+The Shippo status page groups incidents into four monitored domains. The system
+depends on them as follows:
+
+| Status category | System dependency |
+|---|---|
+| Shippo REST API | Direct. Only the external integration repository calls it. |
+| Shippo Web Dashboard | None. No application runtime uses the dashboard. |
+| Carrier API | Indirect. Shippo calls carrier systems while fulfilling rate and shipping operations. |
+| Shippo Platform API | None. Platform-partner APIs are outside this system. |
+
+Direct provider traffic is limited to `POST /addresses/` and
+`POST /shipments/`; an opt-in connectivity test also uses
+`GET /carrier_accounts/`. A Carrier API outage can affect available rates
+without creating a direct network connection from this system to a carrier.
+Operational state changes over time and is available from
+[Shippo's status page](https://status.goshippo.com/).
+
 ## 3. System Context
 
 ```mermaid
