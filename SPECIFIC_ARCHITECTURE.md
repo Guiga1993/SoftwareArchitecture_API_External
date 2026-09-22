@@ -81,10 +81,11 @@ from [Shippo's status page](https://status.goshippo.com/) rather than treated as
 permanent architecture state.
 
 Local development serves this adapter on `127.0.0.1:8001`. In Compose,
-Gunicorn binds container port `8001` under the private service name
-`shippo-integration`; no host port is published. The backend is its only
-application caller, and this container alone receives `SHIPPO_API_KEY`. The
-health route checks HTTP process liveness without loading Shippo settings.
+Gunicorn binds container port `8001` under the service name
+`shippo-integration` and publishes it as host port `8001`. The backend uses the
+private service name for application traffic, and this container alone receives
+`SHIPPO_API_KEY`. The health route checks HTTP process liveness without loading
+Shippo settings.
 
 ## 3. Layered Architecture
 

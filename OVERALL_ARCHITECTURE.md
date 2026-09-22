@@ -23,7 +23,7 @@ generator measurements and caller-supplied US addresses.
 |---|---|---|---|
 | `SoftwareArchitecture_Front_End` | Live Server `:5500` | nginx `:80`, host `:8080` by default | User interaction and presentation |
 | `SoftwareArchitecture_Back_End_API` | Flask `:5001` | Gunicorn `:5001`, host `:5001` by default | Domain CRUD, SQLite, trusted product data, freight policy |
-| `SoftwareArchitecture_API_External` | Flask `:8001` | Gunicorn `:8001`, private only | Shippo contracts, credentials, retries, rate selection |
+| `SoftwareArchitecture_API_External` | Flask `:8001` | Gunicorn `:8001`, host `:8001` | Shippo contracts, credentials, retries, rate selection |
 
 ### Port meanings by runtime
 
@@ -40,7 +40,7 @@ host-facing Docker port. They do not represent two frontend applications or
 two different frontend implementations. Inside Docker, nginx still listens on
 port `80`; the mapping `8080:80` makes it available as `localhost:8080` on the
 host. The backend and integration ports remain `5001` and `8001` inside the
-Compose network; only the backend's `5001` is published to the host.
+Compose network, and both are also published to the same host ports.
 
 External dependencies:
 
@@ -108,7 +108,7 @@ flowchart LR
     Frontend[frontend<br/>nginx :80]
     Backend[backend<br/>Gunicorn :5001]
     Integration[shippo-integration<br/>Gunicorn :8001]
-    Volume[(backend-data<br/>/app/database)]
+    Database[(Host bind mount<br/>./database:/app/database)]
   end
 
   Shippo[api.goshippo.com]
@@ -117,14 +117,15 @@ flowchart LR
   Browser -.->|Optional host :5001| Backend
   Frontend -->|/api prefix stripped| Backend
   Backend -->|http://shippo-integration:8001| Integration
-  Backend -->|SQLite file I/O| Volume
+  Backend -->|SQLite file I/O| Database
   Integration -->|Authenticated HTTPS| Shippo
 ```
 
-Only `frontend` and `backend` publish host ports. Only
-`shippo-integration` receives `SHIPPO_API_KEY`, and `backend-data` is mounted
-only by `backend` at `/app/database`. Health checks are liveness-only and do
-not call Shippo. The stack definition is
+All three services publish host ports, while service-to-service traffic remains
+on the private Compose network. Only `shippo-integration` receives
+`SHIPPO_API_KEY`, and the host path `./database` is bind-mounted only by
+`backend` at `/app/database`. Health checks are liveness-only and do not call
+Shippo. The stack definition is
 [docker-compose.yml](docker-compose.yml), and the complete operating procedure
 is in [CONTAINERIZATION.md](CONTAINERIZATION.md).
 

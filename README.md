@@ -51,9 +51,9 @@ REST API directly. Current availability should be checked on
 
 ## Container Deployment and Isolation
 
-The container runs `app:app` with Gunicorn on port `8001`. Compose does not
-publish that port to the host; the backend reaches it privately at
-`http://shippo-integration:8001`. This is the only service that receives
+The container runs `app:app` with Gunicorn on port `8001`, published by Compose
+as host port `8001`. The backend uses the private Compose network and reaches it
+at `http://shippo-integration:8001`. This is the only service that receives
 `SHIPPO_API_KEY`. Its local `/health` check reports process liveness without
 validating credentials or contacting Shippo.
 
